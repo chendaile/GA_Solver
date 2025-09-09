@@ -1,3 +1,5 @@
+from multiprocessing import Pool
+import multiprocessing as mp
 import numpy as np
 import json
 
@@ -6,13 +8,17 @@ class GA_Solver:
     DEFAULT_PARAMETERS = {"POP_SIZE": 100,
                           "MAX_GEN": 100,
                           "STANDARD_DEVIATION": 10,
-                          "N_CROSSOVER": 3
+                          "N_CROSSOVER": 3,
+                          "N_ELITE": 10
                           }
 
-    def __init__(self, init_matrix: np.ndarray):
+    def __init__(self, init_matrix: np.ndarray, fitness_func=None):
+        """fitness_func need to Get fitness from matrix"""
         self.CONFIG = GA_Solver.DEFAULT_PARAMETERS
         self.solve_shape = init_matrix.shape
         self.init_matrix = init_matrix
+        self.population = np.stack([self.init_matrix])
+        self.fitness_func = fitness_func
 
     def UpdateConfig(self, JSON_PATH: str):
         try:
@@ -22,18 +28,54 @@ class GA_Solver:
             print(f"Wrong reading json: {e}")
 
         for key, value in tmp_read.items():
-            if key not in GA_Solver.DEFAULT_PARAMETERS.keys():
+            if key not in self.CONFIG.keys():
                 print(f"Wrong parameter {key}")
             self.CONFIG[key] = value
             print(f"Change {key}'s value to {value}")
 
-    def get_MutateIndividual(self, individual: np.ndarray):
+    def Get_MutateIndividual(self, individual: np.ndarray):
         tmp_individual = individual.copy()
         tmp_individual += np.random.normal(0,
-                                           GA_Solver.DEFAULT_PARAMETERS["STANDARD_DEVIATION"])
+                                           self.CONFIG["STANDARD_DEVIATION"])
         return tmp_individual
 
-    def get_CrossoverIndividuals(self, individuals):
+    def Get_CrossoverIndividuals(self, individuals):
         weights = np.random.rand(len(individuals))
         weights = weights / weights.sum()
-        return sum(w * ind for w, ind in zip(weights, individuals))
+        return np.tensordot(weights, individuals, axes=1)
+
+    def _generate_individual(self, args):
+        population, operation_type, indices = args
+        if operation_type == 'crossover':
+            return self.Get_CrossoverIndividuals(population[indices])
+        else:
+            return self.Get_MutateIndividual(population[indices[0]])
+
+    def BuildGeneration(self):
+        needed = self.CONFIG['POP_SIZE'] - self.population.shape[0]
+        if needed <= 0:
+            return
+
+        tasks = []
+        for _ in range(needed):
+            if self.population.shape[0] >= self.CONFIG['N_CROSSOVER'] and np.random.rand() > 0.5:
+                indices = np.random.choice(
+                    self.population.shape[0], self.CONFIG['N_CROSSOVER'], replace=False)
+                tasks.append((self.population, 'crossover', indices))
+            else:
+                indices = np.random.choice(self.population.shape[0], 1)
+                tasks.append((self.population, 'mutate', indices))
+
+        with Pool(processes=mp.cpu_count()) as pool:
+            new_individuals = pool.map(self._generate_individual, tasks)
+        self.population = np.concatenate(
+            [self.population] + new_individuals, axis=0)
+
+    def Optimize(self):
+        self.BuildGeneration()
+        with Pool(processes=mp.cpu_count()) as pool:
+            self.scores = np.array(
+                pool.map(self.fitness_func, self.population))
+        sorted_indices = np.argsort(self.scores)[::-1][self.CONFIG['N_ELITE']]
+        self.population = self.population[sorted_indices]
+        self.scores = self.scores[sorted_indices]

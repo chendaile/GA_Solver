@@ -9,7 +9,11 @@ class GA_Solver:
                           "MAX_GEN": 100,
                           "STANDARD_DEVIATION": 10,
                           "N_CROSSOVER": 3,
-                          "N_ELITE": 10
+                          "N_ELITE": 10,
+                          "CROSSOVER_MUTATE_RATE": 0.5,
+                          "SENSITIVITY_THRESHOLD": 0.01,
+                          "ATTENTION_UPDATE_FREQ": 10,
+                          "PERTURBATION_SIZE": 1.0
                           }
 
     def __init__(self, init_matrix: np.ndarray, fitness_func=None):
@@ -19,6 +23,8 @@ class GA_Solver:
         self.init_matrix = init_matrix
         self.population = np.stack([self.init_matrix])
         self.fitness_func = fitness_func
+        self.attention_mask = np.ones(init_matrix.shape, dtype=bool)
+        self.generation_count = 0
 
     def UpdateConfig(self, JSON_PATH: str):
         try:
@@ -58,7 +64,8 @@ class GA_Solver:
 
         tasks = []
         for _ in range(needed):
-            if self.population.shape[0] >= self.CONFIG['N_CROSSOVER'] and np.random.rand() > 0.5:
+            if self.population.shape[0] >= self.CONFIG['N_CROSSOVER'] and \
+                    np.random.rand() > self.CONFIG["CROSSOVER_MUTATE_RATE"]:
                 indices = np.random.choice(
                     self.population.shape[0], self.CONFIG['N_CROSSOVER'], replace=False)
                 tasks.append((self.population, 'crossover', indices))

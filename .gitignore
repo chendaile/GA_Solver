@@ -1,1 +1,4 @@
 CLAUDE.md
+.vscode
+tmp
+__pycache__

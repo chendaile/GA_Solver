@@ -48,7 +48,7 @@ def schwefel_function(matrix):
     return -(-418.9829 * len(x) + np.sum(x * np.sin(np.sqrt(np.abs(x)))))
 
 
-def test_optimization_problem(name, fitness_func, init_range, optimal_value, dimensions=(10,), max_gen=100):
+def test_optimization_problem(name, fitness_func, init_range, optimal_value, dimensions=(10,)):
     print(f"\n{'='*50}")
     print(f"测试问题: {name}")
     print(f"维度: {dimensions}")
@@ -59,18 +59,14 @@ def test_optimization_problem(name, fitness_func, init_range, optimal_value, dim
     solver = GA_Solver(init_matrix, fitness_func)
 
     solver.CONFIG.update({
-        "POP_SIZE": 1000,
-        "MAX_GEN": max_gen,
+        "POP_SIZE": 2000,
         "N_ELITE": 20,
-        "ATTENTION_UPDATE_FREQ": 10,
-        "CROSSOVER_MUTATE_RATE": 0.7,
-        "STANDARD_DEVIATION": 0.5
+        "ATTENTION_UPDATE_FREQ": 30,
+        "CROSSOVER_MUTATE_RATE": 0,
+        "STANDARD_DEVIATION": 0.01,
+        "PERTURBATION_SIZE": 0.1
     })
-
-    print(f"初始最优值: {fitness_func(init_matrix):.6f}")
-
-    best_scores = []
-    solver.Optimize(True)
+    solver.Optimize()
 
     return solver
 
@@ -168,14 +164,14 @@ if __name__ == "__main__":
     print("遗传算法真实优化问题测试")
 
     # 1. Sphere函数 (简单)
-    test_optimization_problem(
-        "Sphere函数", sphere_function, (-5, 5), 0, (5, 5), 30
-    )
+    # test_optimization_problem(
+    #     "Sphere函数", sphere_function, (-5, 5), 0, (5, 5), 30
+    # )
 
     # # 2. Rosenbrock函数 (困难)
-    # test_optimization_problem(
-    #     "Rosenbrock函数", rosenbrock_function, (-2, 2), 0, (4, 4), 80
-    # )
+    test_optimization_problem(
+        "Rosenbrock函数", rosenbrock_function, (-2, 2), 0, (4, 4)
+    )
 
     # # 3. Ackley函数 (多峰)
     # test_optimization_problem(

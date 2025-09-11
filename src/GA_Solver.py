@@ -5,7 +5,6 @@ import json
 from time import time
 import os
 from datetime import datetime
-import platform
 import cpuinfo
 
 
@@ -14,26 +13,29 @@ class GA_Solver:
                           "STANDARD_DEVIATION": 10,
                           "N_CROSSOVER": 3,
                           "CROSSOVER_MUTATE_RATE": 0.5,
-                          "BETTER_THRESHOLD": 0.1,
                           "ATTENTION_UPDATE_FREQ": 20,
                           "PERTURBATION_SIZE": 1.0,
                           "N_ELITE": 30,
-                          "MAX_GEN": 1000
+                          "MAX_GEN": 3000,
+                          "STAGNATION_THRESHOLD": 50
                           }
 
     def __init__(self, init_matrix: np.ndarray, fitness_func=None):
         """fitness_func need to Get fitness from matrix"""
-        self.CONFIG = GA_Solver.DEFAULT_PARAMETERS
+        self.CONFIG = GA_Solver.DEFAULT_PARAMETERS.copy()
         self.solve_shape = init_matrix.shape
         self.init_matrix = init_matrix
         self.population = np.stack([self.init_matrix])
         self.fitness_func = fitness_func
         self.attention_mask = np.ones(init_matrix.shape, dtype=bool)
+        self.attention_efficiencies = []
         self.generation_count = 0
         self.local_optima = []
         self.best_global_score = float('-inf')
+        self.best_score = float('-inf')
         self.start_time = None
         self.end_time = None
+        self.stagnation_gen = 0
 
     def UpdateConfig(self, tmp_read=None, JSON_PATH: str = None):
         if tmp_read is None:
@@ -68,14 +70,17 @@ class GA_Solver:
             sensitivities = pool.map(
                 self._evaluate_position_sensitivity, positions)
 
-        sensitivity_matrix = np.array(sensitivities).reshape(self.solve_shape)
-        self.attention_mask = sensitivity_matrix >= 0
+        self.sensitivity_matrix = np.array(
+            sensitivities).reshape(self.solve_shape)
+        self.attention_mask = self.sensitivity_matrix >= 0
+        self.attention_efficiency = 1 - np.sum(
+            self.attention_mask) / np.prod(self.solve_shape)
+        self.attention_efficiencies.append(self.attention_efficiency)
 
         if not np.any(self.attention_mask):
             current_best = self.population[np.argmax(self.scores)]
-            current_score = self.scores[0]
-
-            if current_score > self.best_global_score + self.CONFIG["BETTER_THRESHOLD"]:
+            current_score = self.best_score
+            if current_score > self.best_global_score:
                 self.local_optima.append((current_best.copy(), current_score))
                 self.attention_mask = np.ones(self.solve_shape, dtype=bool)
                 self.best_global_score = current_score
@@ -84,10 +89,10 @@ class GA_Solver:
 
         if self.verbose:
             print(
-                f"Have updated attention mask: \n{self.attention_mask} \nsensitive matrix: {sensitivity_matrix}")
+                f"Have updated attention mask: \n{self.attention_mask} \nsensitive matrix: {self.sensitivity_matrix} \nefficiency: {self.attention_efficiency}")
 
     def _generate_individual(self, args):
-        population, operation_type, indices, attention_mask = args
+        population, operation_type, indices, attention_mask, std_dev = args
         if operation_type == 'crossover':
             weights = np.random.rand(len(indices))
             weights = weights / weights.sum()
@@ -97,8 +102,7 @@ class GA_Solver:
             return base_individual * (~attention_mask) + crossover_result * attention_mask
         else:
             individual = population[indices[0]].copy()
-            mutation = np.random.normal(0, self.CONFIG["STANDARD_DEVIATION"],
-                                        individual.shape)
+            mutation = np.random.normal(0, std_dev, individual.shape)
             return individual + mutation * attention_mask
 
     def BuildGeneration(self):
@@ -113,11 +117,11 @@ class GA_Solver:
                 indices = np.random.choice(
                     self.population.shape[0], self.CONFIG['N_CROSSOVER'], replace=False)
                 tasks.append((self.population, 'crossover',
-                             indices, self.attention_mask))
+                             indices, self.attention_mask, self.CONFIG["STANDARD_DEVIATION"]))
             else:
                 indices = np.random.choice(self.population.shape[0], 1)
                 tasks.append((self.population, 'mutate',
-                             indices, self.attention_mask))
+                             indices, self.attention_mask, self.CONFIG["STANDARD_DEVIATION"]))
 
         with Pool(processes=mp.cpu_count()) as pool:
             new_individuals = pool.map(self._generate_individual, tasks)
@@ -138,6 +142,7 @@ class GA_Solver:
             for _ in range(self.CONFIG["MAX_GEN"]):
                 time_start = time()
                 self.generation_count += 1
+                self.stagnation_gen += 1
                 self.BuildGeneration()
                 with Pool(processes=mp.cpu_count()) as pool:
                     self.scores = np.array(
@@ -147,16 +152,23 @@ class GA_Solver:
                     ::-1][:self.CONFIG['N_ELITE']]
                 self.population = self.population[sorted_indices]
                 self.scores = self.scores[sorted_indices]
+                if self.scores[0] > self.best_score:
+                    self.stagnation_gen = 0
+                self.best_score = self.scores[0]
 
                 if self.generation_count % self.CONFIG["ATTENTION_UPDATE_FREQ"] == 0:
                     self.UpdateAttentionMask()
+                if self.stagnation_gen > self.CONFIG["STAGNATION_THRESHOLD"]:
+                    self.stagnation_gen = 0
+                    self.CONFIG["STANDARD_DEVIATION"] *= 0.7
+                    print(
+                        f"Encounter stagnation, STANDARD_DEVIATION reduce to: {self.CONFIG['STANDARD_DEVIATION']}")
 
                 time_end = time()
                 print(
-                    f"GEN: {self.generation_count}, Best Score: {self.scores[0]}, Time: {time_end-time_start}")
+                    f"GEN: {self.generation_count}, Best Score: {self.best_score}, Time: {time_end-time_start}")
         except KeyboardInterrupt:
             print("\nOptimization stopped by user")
-
         self.end_time = time()
         self.ResultReport()
 
@@ -172,12 +184,16 @@ class GA_Solver:
         report.append(f"{'='*60}")
         report.append(f"CPU: {cpu_name}")
         report.append(f"Total Runtime: {total_runtime:.2f} seconds")
-        report.append(f"Total Generations: {self.generation_count}")
-        report.append(f"Best Fitness: {self.scores[0]:.6f}")
+        report.append(
+            f"Total Generations: {self.generation_count}")
+        report.append(f"Best Fitness: {self.best_global_score:.6f}")
         report.append(f"Local Optima Found: {len(self.local_optima)}")
         report.append(
             f"Active Attention Positions: {np.sum(self.attention_mask)}")
         report.append(f"\nFinal Attention Mask:\n{self.attention_mask}")
+        report.append(f"\nFinal Sensitivity:\n{self.sensitivity_matrix}")
+        report.append(
+            f"\nAverage attention efficiency:\n{np.average(self.attention_efficiencies)}")
         report.append(f"\nConfiguration Parameters:")
         for key, value in self.CONFIG.items():
             report.append(f"  {key}: {value}")

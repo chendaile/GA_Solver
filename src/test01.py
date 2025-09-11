@@ -58,14 +58,16 @@ def test_optimization_problem(name, fitness_func, init_range, optimal_value, dim
     init_matrix = np.random.uniform(init_range[0], init_range[1], dimensions)
     solver = GA_Solver(init_matrix, fitness_func)
 
-    solver.CONFIG.update({
-        "POP_SIZE": 2000,
-        "N_ELITE": 20,
-        "ATTENTION_UPDATE_FREQ": 30,
-        "CROSSOVER_MUTATE_RATE": 0,
-        "STANDARD_DEVIATION": 0.01,
-        "PERTURBATION_SIZE": 0.1
-    })
+    solver.CONFIG.update({"POP_SIZE": 1500,
+                          "STANDARD_DEVIATION": 8,
+                          "N_CROSSOVER": 3,
+                          "CROSSOVER_MUTATE_RATE": 0,
+                          "ATTENTION_UPDATE_FREQ": 20,
+                          "PERTURBATION_SIZE": 1.0,
+                          "N_ELITE": 30,
+                          "MAX_GEN": 4000,
+                          "STAGNATION_THRESHOLD": 100
+                          })
     solver.Optimize()
 
     return solver
@@ -169,14 +171,14 @@ if __name__ == "__main__":
     # )
 
     # # 2. Rosenbrock函数 (困难)
-    test_optimization_problem(
-        "Rosenbrock函数", rosenbrock_function, (-2, 2), 0, (4, 4)
-    )
-
-    # # 3. Ackley函数 (多峰)
     # test_optimization_problem(
-    #     "Ackley函数", ackley_function, (-5, 5), 0, (3, 3), 60
+    #     "Rosenbrock函数", rosenbrock_function, (-2, 2), 0, (4, 4)
     # )
+
+    # 3. Ackley函数 (多峰)
+    test_optimization_problem(
+        "Ackley函数", ackley_function, (-5, 5), 0, (3, 3)
+    )
 
     # # 4. 背包问题
     # knapsack_problem()

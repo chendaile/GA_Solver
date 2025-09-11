@@ -89,7 +89,7 @@ class GA_Solver:
 
         if self.verbose:
             print(
-                f"Have updated attention mask: \n{self.attention_mask} \nsensitive matrix: {self.sensitivity_matrix} \nefficiency: {self.attention_efficiency}")
+                f"Have updated attention mask: \n{self.attention_mask} \nsensitive matrix: \n{self.sensitivity_matrix} \nefficiency: {self.attention_efficiency}")
 
     def _generate_individual(self, args):
         population, operation_type, indices, attention_mask, std_dev = args
@@ -142,7 +142,7 @@ class GA_Solver:
             for _ in range(self.CONFIG["MAX_GEN"]):
                 time_start = time()
                 self.generation_count += 1
-                self.stagnation_gen += 1
+                # self.stagnation_gen += 1
                 self.BuildGeneration()
                 with Pool(processes=mp.cpu_count()) as pool:
                     self.scores = np.array(

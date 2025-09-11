@@ -59,7 +59,7 @@ def test_optimization_problem(name, fitness_func, init_range, optimal_value, dim
     solver = GA_Solver(init_matrix, fitness_func)
 
     solver.CONFIG.update({"POP_SIZE": 1500,
-                          "STANDARD_DEVIATION": 8,
+                          "STANDARD_DEVIATION": 0.5,
                           "N_CROSSOVER": 3,
                           "CROSSOVER_MUTATE_RATE": 0,
                           "ATTENTION_UPDATE_FREQ": 20,

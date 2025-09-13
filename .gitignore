@@ -1,6 +1,5 @@
 CLAUDE.md
 .vscode
-tmp
 __pycache__
-.pytest_cache
 log
+.claude

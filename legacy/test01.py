@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from GA_Solver import GA_Solver
+from .GA_Solver import GA_Solver
 
 
 def rosenbrock_function(matrix):
